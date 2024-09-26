@@ -191,19 +191,21 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createOrFetchVectorAsset, addInspiration, generateRecipeWithFineTunedModel } from '@/utils/bagelClient';
+import { bagelClient, createOrFetchVectorAsset, addInspiration, generateRecipeWithFineTunedModel, Asset} from '@/utils/bagelClient';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useSession } from 'next-auth/react';
 import { signIn } from 'next-auth/react';
 import LogoutButton from '../signout/page';
 
+
+
 const KnowledgeHub = () => {
   const { data: session, status } = useSession();
   const [inspiration, setInspiration] = useState('');
   const [generatedRecipe, setGeneratedRecipe] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [recipeAssetId, setRecipeAssetId] = useState('');
+  const [recipeAssetId, setRecipeAssetId] = useState<string>('');
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -217,14 +219,13 @@ const KnowledgeHub = () => {
     try {
       const asset = await createOrFetchVectorAsset(apiKey, userId);
       if (!asset || !asset.id) {
-        throw new Error("Failed to retrieve asset ID");
+        throw new Error("Failed to retrieve or create asset");
       }
-      // Update state with the new asset ID
       setRecipeAssetId(asset.id);
       console.log("Asset initialized successfully:", asset);
-    } catch (error: any) {
-      console.error("Failed to initialize recipe database:", error.message);
-      toast.error("Failed to initialize recipe database: " + error.message);
+    } catch (error) {
+      console.error("Failed to initialize recipe database:", error);
+      toast.error(`Failed to initialize recipe database: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

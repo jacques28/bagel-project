@@ -1,5 +1,16 @@
 import { Settings, Client } from "bagelml";
 
+// Define an interface for the asset
+export interface Asset {
+  id: string;
+  title: string;
+  dataset_type: string;
+  category: string;
+  details: string;
+  tags: string[];
+  // Add any other fields that are returned by the API
+}
+
 // Initialize Bagel client with settings
 const settings = new Settings({
   bagel_api_impl: "rest",
@@ -8,32 +19,27 @@ const settings = new Settings({
 
 export const bagelClient = new Client(settings);
 
-export const createOrFetchVectorAsset = async (apiKey: string, userId: string) => {
+export const createOrFetchVectorAsset = async (apiKey: string, userId: string): Promise<Asset> => {
   const assetName = "Bagel Recipe Inspirations";
 
   try {
     // Fetch all assets for the user
     const existingAssets = await bagelClient.get_all_assets(userId, apiKey);
 
-    // Check if datasets exist and are an array
-    if (existingAssets && Array.isArray(existingAssets.datasets)) {
+    if (existingAssets && existingAssets.datasets && Array.isArray(existingAssets.datasets)) {
       // Check if the asset already exists
-      const existingAsset = existingAssets.datasets.find(
-        (asset: any) => asset.title === assetName
-      );
+      const existingAsset = existingAssets.datasets.find((asset: Asset) => asset.title === assetName);
 
       if (existingAsset) {
         console.log("Asset found:", existingAsset);
-        return existingAsset; // Return the existing asset
+        return existingAsset;
       }
-    } else {
-      console.log("No datasets found in the response.");
     }
 
     // Create a new asset if it doesn't exist
     const payload = {
       dataset_type: "VECTOR",
-      title: assetName,
+      title: `${assetName}-${Date.now()}`,  // Append timestamp to make the title unique
       category: "Recipes",
       details: "Vector storage for bagel recipe inspirations",
       tags: ["bagel", "recipe", "vector"],
@@ -48,7 +54,7 @@ export const createOrFetchVectorAsset = async (apiKey: string, userId: string) =
       console.log("Asset created:", createdAsset);
       return createdAsset;
     } else {
-      throw new Error("Asset creation failed.");
+      throw new Error("Asset creation failed: Unexpected response format");
     }
   } catch (error) {
     console.error("Error in createOrFetchVectorAsset:", error);
@@ -56,6 +62,7 @@ export const createOrFetchVectorAsset = async (apiKey: string, userId: string) =
   }
 };
 
+// Remove this if it's not needed
 const deleteAsset = async (assetId: string, apiKey: string) => {
   try {
     const response = await bagelClient.delete_asset(assetId, apiKey);
@@ -66,7 +73,11 @@ const deleteAsset = async (assetId: string, apiKey: string) => {
   }
 };
 
-export const uploadFileToAsset = async (assetId: string, filePath: string, apiKey: string) => {
+export const uploadFileToAsset = async (
+  assetId: string,
+  filePath: string,
+  apiKey: string
+): Promise<any> => {
   try {
     const response = await bagelClient.add_file(assetId, filePath, apiKey);
     console.log("File uploaded:", response);
@@ -78,20 +89,25 @@ export const uploadFileToAsset = async (assetId: string, filePath: string, apiKe
 };
 
 // Function to query the fine-tuned model for recipe generation
-export const generateRecipeWithFineTunedModel = async (modelAssetId: string, apiKey: string, prompt: string) => {
+export const generateRecipeWithFineTunedModel = async (
+  modelAssetId: string,
+  apiKey: string,
+  prompt: string
+): Promise<string> => {
   const payload = {
-    model_id: "de4ac506-e972-4a82-8527-317921171439",  // The asset ID of your fine-tuned model
-    inputs: prompt,  // The inspiration text you want to use for generating a recipe
+    model_id: "de4ac506-e972-4a82-8527-317921171439", // The asset ID of your fine-tuned model
+    inputs: prompt, // The inspiration text you want to use for generating a recipe
   };
 
   try {
     const response = await bagelClient.query_asset(modelAssetId, payload, apiKey);
-    return response.generated_text;  // Assuming the Bagel API returns the generated recipe text
+    return response.generated_text; // Assuming the Bagel API returns the generated recipe text
   } catch (error) {
-    console.error('Error generating recipe:', error);
+    console.error("Error generating recipe:", error);
     throw error;
   }
 };
+
 
 export const uploadProductCatalog = async (assetId: string, apiKey: string, filePath: string) => {
   try {

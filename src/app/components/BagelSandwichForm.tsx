@@ -10,6 +10,7 @@ const BagelSandwichForm: React.FC = () => {
     console.log('Submitting recipe:', recipe);
     // Implement submission logic here
   };
+  
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
@@ -18,6 +19,7 @@ const BagelSandwichForm: React.FC = () => {
           <h1 className="text-3xl md:text-4xl font-bold text-center">Share your unique knowledge of bagel sandwiches 🥯</h1>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          
           <textarea
             value={recipe}
             onChange={(e) => setRecipe(e.target.value)}
@@ -57,6 +59,7 @@ const BagelSandwichForm: React.FC = () => {
             </li>
           </ul>
         </div>
+        console.log(NEXT_PUBLIC_BAGEL_USER_ID);
       </div>
     </div>
   );

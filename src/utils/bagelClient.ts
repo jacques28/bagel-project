@@ -1,16 +1,5 @@
 import { Settings, Client } from "bagelml";
 
-// Define an interface for the asset
-export interface Asset {
-  id: string;
-  title: string;
-  dataset_type: string;
-  category: string;
-  details: string;
-  tags: string[];
-  // Add any other fields that are returned by the API
-}
-
 // Initialize Bagel client with settings
 const settings = new Settings({
   bagel_api_impl: "rest",
@@ -19,111 +8,100 @@ const settings = new Settings({
 
 export const bagelClient = new Client(settings);
 
-export const createOrFetchVectorAsset = async (apiKey: string, userId: string): Promise<Asset> => {
-  const assetName = "Bagel Recipe Inspirations";
-
+export const getOrCreateSharedAsset = async (apiKey: string, userId: string): Promise<string> => {
   try {
-    // Fetch all assets for the user
-    const existingAssets = await bagelClient.get_all_assets(userId, apiKey);
+    const assets = await bagelClient.get_all_assets(userId, apiKey);
+    console.log("Retrieved assets:", assets); // For debugging
 
-    if (existingAssets && existingAssets.datasets && Array.isArray(existingAssets.datasets)) {
-      // Check if the asset already exists
-      const existingAsset = existingAssets.datasets.find((asset: Asset) => asset.title === assetName);
+    let sharedAsset = assets.find((asset: any) => asset.title === 'Shared Bagel Recipes');
 
-      if (existingAsset) {
-        console.log("Asset found:", existingAsset);
-        return existingAsset;
-      }
+    if (!sharedAsset) {
+      const newAsset = await bagelClient.create_asset({
+        dataset_type: "VECTOR",
+        title: "Shared Bagel Recipes",
+        category: "Recipes",
+        details: "Shared asset for bagel recipes",
+        tags: ["bagel", "recipe"],
+        userId: userId,
+        embedding_model: "bagel-text",
+        dimensions: 768
+      }, apiKey);
+      console.log("Created new asset:", newAsset); // For debugging
+      sharedAsset = newAsset;
     }
 
-    // Create a new asset if it doesn't exist
+    // Check if sharedAsset is a string (just the ID) or an object
+    if (typeof sharedAsset === 'string') {
+      return sharedAsset;
+    } else if (sharedAsset && typeof sharedAsset === 'object' && 'id' in sharedAsset) {
+      return sharedAsset.id;
+    } else {
+      throw new Error("Invalid asset structure returned from API");
+    }
+  } catch (error) {
+    console.error("Error in getOrCreateSharedAsset:", error);
+    throw error;
+  }
+};
+
+// Add recipes from uploaded file
+export const addRecipeFromFile = async (assetId: string, apiKey: string, file: File) => {
+  try {
+    const fileContent = await file.text();
+    let recipes: { title: string, ingredients: string, instructions: string }[];
+
+    if (file.type === 'application/json') {
+      recipes = JSON.parse(fileContent);
+    } else {
+      // Assume text file contains one recipe
+      recipes = [{
+        title: 'Uploaded Recipe',
+        ingredients: fileContent,
+        instructions: 'Instructions not provided'
+      }];
+    }
+
     const payload = {
-      dataset_type: "VECTOR",
-      title: `${assetName}-${Date.now()}`,  // Append timestamp to make the title unique
-      category: "Recipes",
-      details: "Vector storage for bagel recipe inspirations",
-      tags: ["bagel", "recipe", "vector"],
-      userId: userId,
-      embedding_model: "bagel-text",
-      dimensions: 768,
+      metadatas: recipes.map(recipe => ({ source: "file_upload", ...recipe })),
+      documents: recipes.map(recipe => `${recipe.title}\n${recipe.ingredients}\n${recipe.instructions}`),
+      ids: recipes.map(() => Date.now().toString() + Math.random().toString(36).substr(2, 9)),
     };
 
-    const createdAsset = await bagelClient.create_asset(payload, apiKey);
+    return await bagelClient.add_data_to_asset(assetId, payload, apiKey);
+  } catch (error) {
+    console.error("Error adding recipes from file:", error);
+    throw error;
+  }
+};
 
-    if (createdAsset && createdAsset.id) {
-      console.log("Asset created:", createdAsset);
-      return createdAsset;
+// Generate a recipe based on user input
+export const generateRecipe = async (assetId: string, apiKey: string, inspiration: string) => {
+  try {
+    const payload = {
+      queries: [inspiration],
+      n_results: 1,
+      include: ["metadatas", "documents", "distances"]
+    };
+
+    const response = await bagelClient.query_asset(assetId, payload, apiKey);
+
+    if (response && response.metadatas && response.metadatas.length > 0) {
+      const recipe = response.metadatas[0];
+      return `Title: ${recipe.title}\nIngredients: ${recipe.ingredients}\nInstructions: ${recipe.instructions}`;
     } else {
-      throw new Error("Asset creation failed: Unexpected response format");
+      return "No matching recipe found. Try a different inspiration!";
     }
-  } catch (error) {
-    console.error("Error in createOrFetchVectorAsset:", error);
-    throw error;
-  }
-};
-
-// Remove this if it's not needed
-const deleteAsset = async (assetId: string, apiKey: string) => {
-  try {
-    const response = await bagelClient.delete_asset(assetId, apiKey);
-    console.log("Asset deleted:", response);
-  } catch (error) {
-    console.error("Error deleting asset:", error);
-    throw error;
-  }
-};
-
-export const uploadFileToAsset = async (
-  assetId: string,
-  filePath: string,
-  apiKey: string
-): Promise<any> => {
-  try {
-    const response = await bagelClient.add_file(assetId, filePath, apiKey);
-    console.log("File uploaded:", response);
-    return response;
-  } catch (error) {
-    console.error("Error uploading file:", error);
-    throw error;
-  }
-};
-
-// Function to query the fine-tuned model for recipe generation
-export const generateRecipeWithFineTunedModel = async (
-  modelAssetId: string,
-  apiKey: string,
-  prompt: string
-): Promise<string> => {
-  const payload = {
-    model_id: "de4ac506-e972-4a82-8527-317921171439", // The asset ID of your fine-tuned model
-    inputs: prompt, // The inspiration text you want to use for generating a recipe
-  };
-
-  try {
-    const response = await bagelClient.query_asset(modelAssetId, payload, apiKey);
-    return response.generated_text; // Assuming the Bagel API returns the generated recipe text
   } catch (error) {
     console.error("Error generating recipe:", error);
     throw error;
   }
 };
 
-
-export const uploadProductCatalog = async (assetId: string, apiKey: string, filePath: string) => {
-  try {
-    const response = await bagelClient.add_file(assetId, filePath, apiKey);
-    console.log("File uploaded:", response);
-    return response;
-  } catch (error) {
-    console.error("Error uploading file:", error);
-    throw error;
-  }
-};
-
+// Function to add individual inspiration text as embeddings
 export const addInspiration = async (assetId: string, apiKey: string, inspiration: string) => {
   const payload = {
     metadatas: [{ source: "user_input" }],
-    documents: [inspiration],
+    documents: [inspiration],  // Add inspiration text as document
     ids: [Date.now().toString()],  // Generate a unique ID based on the current timestamp
   };
 
@@ -136,34 +114,3 @@ export const addInspiration = async (assetId: string, apiKey: string, inspiratio
     throw error;
   }
 };
-
-export const downloadProductFile = async (assetId: string, apiKey: string, fileName: string) => {
-  try {
-    const response = await bagelClient.download_model_file(assetId, fileName, apiKey);
-    console.log("File downloaded:", response);
-    return response;
-  } catch (error) {
-    console.error("Error downloading file:", error);
-    throw error;
-  }
-};
-
-export const queryAsset = async (assetId: string, apiKey: string, queryText: string) => {
-  const payload = {
-    where: {},
-    where_document: {},
-    query_texts: [queryText],
-    n_results: 1,
-    include: ["metadatas", "documents", "distances"],
-  };
-
-  try {
-    const response = await bagelClient.query_asset(assetId, payload, apiKey);
-    console.log("Query result:", response);
-    return response;
-  } catch (error) {
-    console.error("Error querying asset:", error);
-    throw error;
-  }
-};
-
